@@ -10,6 +10,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -148,7 +150,40 @@ object TaskOverlayManager {
                 }
             }
 
-            // WindowManager layout params
+            // Consume ordinary touch input for its entire visible area so underlying apps receive no taps
+            view.setOnTouchListener { _, _ -> true }
+
+            // Apply immersive fullscreen system bar hiding
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
+                        try {
+                            v.windowInsetsController?.let { controller ->
+                                controller.hide(
+                                    WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
+                                )
+                                controller.systemBarsBehavior =
+                                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to hide system bars via insets controller: ${e.message}")
+                        }
+                    }
+                    override fun onViewDetachedFromWindow(v: View) {}
+                })
+            } else {
+                @Suppress("DEPRECATION")
+                view.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                )
+            }
+
+            // WindowManager layout params for dedicated fullscreen display
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -156,18 +191,22 @@ object TaskOverlayManager {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
+            val windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
                 layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
-                PixelFormat.TRANSLUCENT
+                windowFlags,
+                PixelFormat.OPAQUE
             ).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                x = 0
-                y = (context.resources.displayMetrics.density * 36).toInt() // Margin below status bar
+                gravity = Gravity.FILL
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
             }
 
             windowManager.addView(view, params)

@@ -1,38 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/overlayRoot"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/overlay_fullscreen_bg"
+    android:clickable="true"
+    android:focusable="false"
+    android:fitsSystemWindows="true"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="56dp"
+    android:paddingBottom="40dp">
 
+    <!-- Header Section -->
     <LinearLayout
-        android:id="@+id/overlayCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@drawable/bg_overlay_card"
-        android:padding="16dp"
-        android:elevation="8dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
 
-        <!-- Header -->
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="10dp">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvOverlayHeader"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/overlay_header"
                 android:textColor="@color/overlay_text_primary"
-                android:textSize="17sp"
+                android:textSize="26sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -40,56 +41,57 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/overlay_text_secondary"
-                android:textSize="12sp"
+                android:textSize="14sp"
                 android:text="3 pending"
-                android:layout_marginEnd="12dp" />
-
-            <ImageView
-                android:id="@+id/btnCloseOverlay"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_close"
-                android:contentDescription="Close"
-                android:background="?android:attr/selectableItemBackgroundBorderless" />
+                android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- Divider -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/overlay_card_stroke"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Task List Container -->
-        <LinearLayout
-            android:id="@+id/tasksContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-
-        <!-- Empty State View -->
-        <TextView
-            android:id="@+id/tvEmptyState"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/overlay_empty"
-            android:textColor="@color/overlay_text_secondary"
-            android:textSize="14sp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:visibility="gone" />
-
-        <!-- Footer / Timer indication -->
-        <TextView
-            android:id="@+id/tvTimerHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Auto-dismissing in 3s"
-            android:textColor="@color/overlay_text_secondary"
-            android:textSize="10sp"
-            android:gravity="end"
-            android:layout_marginTop="6dp" />
-
+        <ImageView
+            android:id="@+id/btnCloseOverlay"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_close"
+            android:contentDescription="Close"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
-</FrameLayout>
+    <!-- Full-width Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/overlay_card_stroke"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Task List Container (Expands to occupy middle space) -->
+    <LinearLayout
+        android:id="@+id/tasksContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
+
+    <!-- Empty State View -->
+    <TextView
+        android:id="@+id/tvEmptyState"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/overlay_empty"
+        android:textColor="@color/overlay_text_secondary"
+        android:textSize="18sp"
+        android:visibility="gone" />
+
+    <!-- Footer / Auto-dismissal indication -->
+    <TextView
+        android:id="@+id/tvTimerHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Auto-dismissing in 3s"
+        android:textColor="@color/overlay_text_secondary"
+        android:textSize="13sp"
+        android:gravity="center"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>
