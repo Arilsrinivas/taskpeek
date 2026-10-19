@@ -28,10 +28,13 @@
     <color name="status_inactive">#94A3B8</color>
     <color name="status_warning">#F59E0B</color>
 
-    <!-- Overlay Colors -->
-    <color name="overlay_fullscreen_bg">#0F172A</color>
-    <color name="overlay_card_bg">#0F172A</color>
-    <color name="overlay_card_stroke">#334155</color>
-    <color name="overlay_text_primary">#F8FAFC</color>
-    <color name="overlay_text_secondary">#94A3B8</color>
+    <!-- Overlay Colors (80% black translucent over phone wallpaper) -->
+    <color name="overlay_fullscreen_bg">#CC000000</color>
+    <color name="overlay_card_bg">#CC000000</color>
+    <color name="overlay_card_stroke">#22FFFFFF</color>
+    <color name="overlay_separator">#22FFFFFF</color>
+    <color name="overlay_text_primary">#FFFFFF</color>
+    <color name="overlay_text_secondary">#A0AEC0</color>
+    <color name="overlay_text_muted">#9E9E9E</color>
+    <color name="overlay_bottom_line">#80FFFFFF</color>
 </resources>

@@ -7,91 +7,101 @@
     android:background="@color/overlay_fullscreen_bg"
     android:clickable="true"
     android:focusable="false"
-    android:fitsSystemWindows="true"
-    android:paddingStart="24dp"
-    android:paddingEnd="24dp"
+    android:paddingStart="28dp"
+    android:paddingEnd="28dp"
     android:paddingTop="56dp"
-    android:paddingBottom="40dp">
+    android:paddingBottom="80dp">
 
-    <!-- Header Section -->
-    <LinearLayout
+    <!-- Upper Right: Current Date -->
+    <TextView
+        android:id="@+id/tvOverlayDate"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:gravity="end"
+        android:textColor="@color/overlay_text_secondary"
+        android:textSize="13.5sp"
+        android:text="Sun, 19 Oct 2026"
+        android:layout_marginBottom="32dp" />
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+    <!-- Subheading: TODAY'S TASKS -->
+    <TextView
+        android:id="@+id/tvOverlaySubheader"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="T O D A Y &apos; S   T A S K S"
+        android:textColor="@color/overlay_text_muted"
+        android:textSize="11sp"
+        android:letterSpacing="0.25"
+        android:textStyle="bold"
+        android:layout_marginBottom="14dp" />
 
-            <TextView
-                android:id="@+id/tvOverlayHeader"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/overlay_header"
-                android:textColor="@color/overlay_text_primary"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvTaskCount"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/overlay_text_secondary"
-                android:textSize="14sp"
-                android:text="3 pending"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-        <ImageView
-            android:id="@+id/btnCloseOverlay"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:padding="6dp"
-            android:src="@drawable/ic_close"
-            android:contentDescription="Close"
-            android:background="?android:attr/selectableItemBackgroundBorderless" />
-    </LinearLayout>
-
-    <!-- Full-width Divider -->
-    <View
+    <!-- Main Headline: Let's make progress today. -->
+    <TextView
+        android:id="@+id/tvHeadline"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/overlay_card_stroke"
-        android:layout_marginBottom="24dp" />
+        android:layout_height="wrap_content"
+        android:text="Let&apos;s make&#10;progress today."
+        android:textColor="@color/overlay_text_primary"
+        android:textSize="38sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif"
+        android:lineSpacingMultiplier="0.95"
+        android:layout_marginBottom="40dp" />
 
-    <!-- Task List Container (Expands to occupy middle space) -->
+    <!-- Task List Container -->
     <LinearLayout
         android:id="@+id/tasksContainer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:orientation="vertical" />
 
     <!-- Empty State View -->
     <TextView
         android:id="@+id/tvEmptyState"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:gravity="center"
-        android:text="@string/overlay_empty"
-        android:textColor="@color/overlay_text_secondary"
-        android:textSize="18sp"
+        android:text="No pending tasks for today"
+        android:textColor="@color/overlay_text_muted"
+        android:textSize="16sp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp"
         android:visibility="gone" />
 
-    <!-- Footer / Auto-dismissal indication -->
-    <TextView
-        android:id="@+id/tvTimerHint"
+    <!-- Bottom Section: Inspirational Quote & Accent Line -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Auto-dismissing in 3s"
-        android:textColor="@color/overlay_text_secondary"
-        android:textSize="13sp"
-        android:gravity="center"
-        android:layout_marginTop="16dp" />
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_marginTop="64dp">
+
+        <TextView
+            android:id="@+id/tvQuoteLine1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="S M A L L   S T E P S   E V E R Y   D A Y"
+            android:textColor="@color/overlay_text_secondary"
+            android:textSize="10.5sp"
+            android:letterSpacing="0.2"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tvQuoteLine2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="L E A D   T O   B I G   R E S U L T S"
+            android:textColor="@color/overlay_text_secondary"
+            android:textSize="10.5sp"
+            android:letterSpacing="0.2"
+            android:gravity="center"
+            android:layout_marginTop="4dp" />
+
+        <View
+            android:layout_width="38dp"
+            android:layout_height="1.5dp"
+            android:background="@color/overlay_bottom_line"
+            android:layout_marginTop="16dp" />
+    </LinearLayout>
 
 </LinearLayout>

@@ -26,6 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object TaskOverlayManager {
 
@@ -98,54 +101,67 @@ object TaskOverlayManager {
             val view = inflater.inflate(R.layout.view_task_overlay, null)
 
             // Bind Views
-            val tvTaskCount = view.findViewById<TextView>(R.id.tvTaskCount)
-            val btnClose = view.findViewById<ImageView>(R.id.btnCloseOverlay)
+            val tvOverlayDate = view.findViewById<TextView>(R.id.tvOverlayDate)
             val tasksContainer = view.findViewById<LinearLayout>(R.id.tasksContainer)
             val tvEmptyState = view.findViewById<TextView>(R.id.tvEmptyState)
 
-            // Manual dismiss button
-            btnClose.setOnClickListener {
-                dismissOverlay(context)
-            }
+            // Dynamic current local date in reference format (e.g., Sun, 19 Oct 2026)
+            tvOverlayDate.text = DateUtils.getTodayReferenceDateString()
 
             if (tasks.isEmpty()) {
-                tvTaskCount.text = "0 pending"
                 tvEmptyState.visibility = View.VISIBLE
                 tasksContainer.visibility = View.GONE
             } else {
                 tvEmptyState.visibility = View.GONE
                 tasksContainer.visibility = View.VISIBLE
-                tvTaskCount.text = "${tasks.size} pending"
 
-                // Populate up to 3 task rows
+                val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
                 tasks.take(3).forEach { task ->
                     val taskRow = inflater.inflate(R.layout.item_overlay_task, tasksContainer, false)
                     val tvTitle = taskRow.findViewById<TextView>(R.id.tvTaskTitle)
-                    val tvBadge = taskRow.findViewById<TextView>(R.id.tvPriorityBadge)
-                    val viewPriorityDot = taskRow.findViewById<View>(R.id.viewPriorityDot)
+                    val tvSubtitle = taskRow.findViewById<TextView>(R.id.tvTaskSubtitle)
+                    val tvTime = taskRow.findViewById<TextView>(R.id.tvTaskTime)
+                    val ivIcon = taskRow.findViewById<ImageView>(R.id.ivCategoryIcon)
 
-                    tvTitle.text = task.title
-
-                    when (task.priority.uppercase()) {
-                        "HIGH" -> {
-                            tvBadge.text = "HIGH"
-                            tvBadge.setTextColor(ContextCompat.getColor(context, R.color.priority_high))
-                            tvBadge.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_high)
-                            viewPriorityDot.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_high)
-                        }
-                        "LOW" -> {
-                            tvBadge.text = "LOW"
-                            tvBadge.setTextColor(ContextCompat.getColor(context, R.color.priority_low))
-                            tvBadge.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_low)
-                            viewPriorityDot.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_low)
-                        }
-                        else -> {
-                            tvBadge.text = "MED"
-                            tvBadge.setTextColor(ContextCompat.getColor(context, R.color.priority_medium))
-                            tvBadge.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_medium)
-                            viewPriorityDot.background = ContextCompat.getDrawable(context, R.drawable.bg_badge_medium)
-                        }
+                    // Parse title and optional subtitle if delimited, or display title directly
+                    val parts = task.title.split(Regex(" - |: "), limit = 2)
+                    if (parts.size == 2) {
+                        tvTitle.text = parts[0].trim()
+                        tvSubtitle.text = parts[1].trim()
+                        tvSubtitle.visibility = View.VISIBLE
+                    } else {
+                        tvTitle.text = task.title
+                        tvSubtitle.visibility = View.GONE
                     }
+
+                    // Format scheduled/created time for far-right alignment
+                    if (task.createdAt > 0L) {
+                        tvTime.text = timeFormat.format(Date(task.createdAt))
+                        tvTime.visibility = View.VISIBLE
+                    } else {
+                        tvTime.visibility = View.GONE
+                    }
+
+                    // Select clean monochrome line icon matching the task category
+                    val lower = task.title.lowercase()
+                    val iconRes = when {
+                        lower.contains("dsa") || lower.contains("code") || lower.contains("pr") ||
+                        lower.contains("git") || lower.contains("bug") || lower.contains("dev") -> R.drawable.ic_cat_code
+
+                        lower.contains("comm") || lower.contains("read") || lower.contains("book") ||
+                        lower.contains("notes") || lower.contains("revision") || lower.contains("study") -> R.drawable.ic_cat_book
+
+                        lower.contains("project") || lower.contains("work") || lower.contains("report") ||
+                        lower.contains("ui") || lower.contains("laptop") || lower.contains("sync") -> R.drawable.ic_cat_laptop
+
+                        lower.contains("workout") || lower.contains("gym") || lower.contains("run") ||
+                        lower.contains("exercise") || lower.contains("fitness") -> R.drawable.ic_cat_workout
+
+                        else -> R.drawable.ic_cat_task
+                    }
+                    ivIcon.setImageResource(iconRes)
+
                     tasksContainer.addView(taskRow)
                 }
             }
@@ -183,7 +199,7 @@ object TaskOverlayManager {
                 )
             }
 
-            // WindowManager layout params for dedicated fullscreen display
+            // WindowManager layout params with PixelFormat.TRANSLUCENT so wallpaper shows through 80% black
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -193,14 +209,15 @@ object TaskOverlayManager {
 
             val windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 layoutType,
                 windowFlags,
-                PixelFormat.OPAQUE
+                PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.FILL
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -209,18 +226,33 @@ object TaskOverlayManager {
                 }
             }
 
+            // Start transparent for smooth fade in
+            view.alpha = 0f
             windowManager.addView(view, params)
             overlayView = view
             isShowing = true
-            Log.d(TAG, "Task overlay displayed successfully")
+            Log.d(TAG, "Task overlay added to WindowManager; starting 200ms fade in")
 
-            // Schedule automatic removal after exactly 3 seconds
-            val runnable = Runnable {
-                Log.d(TAG, "3 seconds elapsed: automatically dismissing overlay")
-                dismissOverlay(context)
+            // Fade in over 200 milliseconds
+            view.animate()
+                .alpha(1f)
+                .setDuration(200L)
+                .start()
+
+            // Schedule smooth 250ms fade out before 3-second automatic dismissal
+            val fadeOutRunnable = Runnable {
+                Log.d(TAG, "Starting 250ms fade out before dismissal")
+                overlayView?.animate()
+                    ?.alpha(0f)
+                    ?.setDuration(250L)
+                    ?.withEndAction {
+                        Log.d(TAG, "Fade out complete: detaching overlay from WindowManager")
+                        dismissOverlay(context)
+                    }
+                    ?.start()
             }
-            dismissRunnable = runnable
-            mainHandler.postDelayed(runnable, DISPLAY_DURATION_MS)
+            dismissRunnable = fadeOutRunnable
+            mainHandler.postDelayed(fadeOutRunnable, DISPLAY_DURATION_MS - 250L)
 
         } catch (e: Exception) {
             Log.e(TAG, "Error displaying task overlay", e)
@@ -229,7 +261,7 @@ object TaskOverlayManager {
     }
 
     /**
-     * Safely dismiss and remove the overlay view, cancelling timers.
+     * Safely dismiss and remove the overlay view, cancelling timers and ongoing animations.
      */
     @Synchronized
     fun dismissOverlay(context: Context) {
@@ -240,6 +272,7 @@ object TaskOverlayManager {
 
         overlayView?.let { view ->
             try {
+                view.animate().cancel()
                 val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 if (view.isAttachedToWindow) {
                     windowManager.removeView(view)

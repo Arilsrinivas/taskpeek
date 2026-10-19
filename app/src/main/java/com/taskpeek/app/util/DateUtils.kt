@@ -8,6 +8,11 @@ object DateUtils {
 
     private val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val DISPLAY_FORMAT = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+    private val REFERENCE_DATE_FORMAT = SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
+
+    fun getTodayReferenceDateString(): String {
+        return REFERENCE_DATE_FORMAT.format(Date())
+    }
 
     fun getTodayDateString(): String {
         return DATE_FORMAT.format(Date())
