@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">TaskPeek</string>
+    <string name="title_unlock_monitor">Unlock Monitor</string>
+    <string name="desc_unlock_monitor">Automatically display today\'s pending tasks for 3 seconds when you unlock your phone.</string>
+    <string name="status_monitoring_active">Monitoring is Active</string>
+    <string name="status_monitoring_inactive">Monitoring is Disabled</string>
+    <string name="btn_enable_monitoring">Enable Unlock Monitoring</string>
+    <string name="btn_disable_monitoring">Disable Unlock Monitoring</string>
+    <string name="btn_grant_overlay">Grant Overlay Permission</string>
+    <string name="btn_test_overlay">Test 3-Second Overlay</string>
+    
+    <string name="section_add_task">Add Task</string>
+    <string name="hint_task_title">What needs to be done?</string>
+    <string name="chk_assign_today">Assign to Today</string>
+    <string name="btn_add_task">Add Task</string>
+    
+    <string name="section_tasks">Tasks</string>
+    <string name="tab_today">Today</string>
+    <string name="tab_all">All Tasks</string>
+    <string name="empty_tasks">No tasks found. Add a task above!</string>
+    <string name="empty_today_tasks">No pending tasks for today!</string>
+    
+    <!-- Overlay Strings -->
+    <string name="overlay_header">Today\'s Tasks</string>
+    <string name="overlay_empty">No pending tasks for today 🎉</string>
+    
+    <!-- Notification -->
+    <string name="notification_channel_name">TaskPeek Unlock Monitor</string>
+    <string name="notification_channel_desc">Keeps TaskPeek running in background to detect device unlocks.</string>
+    <string name="notification_title">TaskPeek Active</string>
+    <string name="notification_text">Monitoring device unlock to display today\'s tasks.</string>
+</resources>
