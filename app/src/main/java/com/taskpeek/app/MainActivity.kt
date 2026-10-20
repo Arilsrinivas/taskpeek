@@ -8,8 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -32,11 +34,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var taskAdapter: TaskAdapter
 
     private var showOnlyToday = true
+    private var isProgrammaticSwitchChange = false
 
     // Permission launcher for overlay permission (Android 6.0+)
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
+        if (hasOverlayPermission()) {
+            if (PreferenceHelper.isMonitoringEnabled(this)) {
+                UnlockMonitorService.start(this)
+            }
+        }
         updatePermissionAndServiceUI()
     }
 
@@ -45,7 +53,9 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            checkAndStartServiceIfRequested()
+            if (PreferenceHelper.isMonitoringEnabled(this) && hasOverlayPermission()) {
+                UnlockMonitorService.start(this)
+            }
         } else {
             Toast.makeText(
                 this,
@@ -53,6 +63,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.LENGTH_LONG
             ).show()
         }
+        updatePermissionAndServiceUI()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +81,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionAndServiceUI()
+        // Preload / warm cache for today's tasks
+        TaskOverlayManager.warmCache(this)
     }
 
     private fun setupRecyclerView() {
@@ -77,12 +90,19 @@ class MainActivity : AppCompatActivity() {
             onToggleComplete = { task, isCompleted ->
                 lifecycleScope.launch {
                     database.taskDao().setTaskCompleted(task.id, isCompleted)
+                    TaskOverlayManager.invalidateCache()
+                    TaskOverlayManager.warmCache(this@MainActivity)
                 }
             },
             onDelete = { task ->
                 lifecycleScope.launch {
                     database.taskDao().deleteTask(task)
+                    TaskOverlayManager.invalidateCache()
+                    TaskOverlayManager.warmCache(this@MainActivity)
                 }
+            },
+            onEdit = { task ->
+                showEditTaskDialog(task)
             }
         )
 
@@ -92,23 +112,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showEditTaskDialog(task: Task) {
+        val input = EditText(this).apply {
+            setText(task.title)
+            setSelection(text.length)
+            setPadding(48, 32, 48, 32)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Edit Task")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val newTitle = input.text.toString().trim()
+                if (newTitle.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        val updatedTask = task.copy(title = newTitle)
+                        database.taskDao().updateTask(updatedTask)
+                        TaskOverlayManager.invalidateCache()
+                        TaskOverlayManager.warmCache(this@MainActivity)
+                        Toast.makeText(this@MainActivity, "Task updated!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun setupListeners() {
-        // Monitoring switch
+        // Monitoring switch with synchronized state handling
         binding.switchMonitoring.setOnCheckedChangeListener { _, isChecked ->
+            if (isProgrammaticSwitchChange) return@setOnCheckedChangeListener
+
             if (isChecked) {
                 if (!hasOverlayPermission()) {
+                    Toast.makeText(
+                        this,
+                        "System Alert Window permission required to display task overlay.",
+                        Toast.LENGTH_LONG
+                    ).show()
                     requestOverlayPermission()
-                    binding.switchMonitoring.isChecked = false
-                } else if (!hasNotificationPermission()) {
-                    requestNotificationPermission()
-                    binding.switchMonitoring.isChecked = false
-                } else {
-                    UnlockMonitorService.start(this)
-                    updatePermissionAndServiceUI()
+                    setSwitchCheckedWithoutTriggering(false)
+                    return@setOnCheckedChangeListener
                 }
+
+                if (!hasNotificationPermission()) {
+                    Toast.makeText(
+                        this,
+                        "Notification permission required for background monitoring.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    requestNotificationPermission()
+                    setSwitchCheckedWithoutTriggering(false)
+                    return@setOnCheckedChangeListener
+                }
+
+                // Explicitly persist enabled state and start monitoring
+                PreferenceHelper.setMonitoringEnabled(this, true)
+                UnlockMonitorService.start(this)
+                updateStatusText(true)
             } else {
+                // Explicitly persist disabled state and stop monitoring immediately
+                PreferenceHelper.setMonitoringEnabled(this, false)
                 UnlockMonitorService.stop(this)
-                updatePermissionAndServiceUI()
+                TaskOverlayManager.onMonitoringDisabled(this)
+                updateStatusText(false)
             }
         }
 
@@ -142,6 +209,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setSwitchCheckedWithoutTriggering(checked: Boolean) {
+        isProgrammaticSwitchChange = true
+        binding.switchMonitoring.isChecked = checked
+        isProgrammaticSwitchChange = false
+    }
+
+    private fun updateStatusText(isActive: Boolean) {
+        if (isActive) {
+            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_active)
+            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_active))
+        } else {
+            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_inactive)
+            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_inactive))
+        }
+    }
+
     private fun addNewTask() {
         val title = binding.etTaskTitle.text?.toString()?.trim().orEmpty()
         if (title.isEmpty()) {
@@ -151,7 +234,7 @@ class MainActivity : AppCompatActivity() {
         binding.tilTaskTitle.error = null
 
         val isToday = binding.cbAssignToday.isChecked
-        val taskDate = if (isToday) DateUtils.getTodayDateString() else DateUtils.getTodayDateString()
+        val taskDate = if (isToday) DateUtils.getTodayDateString() else DateUtils.getTomorrowDateString()
 
         val priority = when {
             binding.chipHigh.isChecked -> "HIGH"
@@ -167,6 +250,8 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             database.taskDao().insertTask(newTask)
+            TaskOverlayManager.invalidateCache()
+            TaskOverlayManager.warmCache(this@MainActivity)
             binding.etTaskTitle.text?.clear()
             Toast.makeText(this@MainActivity, "Task added!", Toast.LENGTH_SHORT).show()
         }
@@ -201,18 +286,10 @@ class MainActivity : AppCompatActivity() {
         binding.bannerOverlayPermission.visibility = if (overlayGranted) View.GONE else View.VISIBLE
 
         val isMonitoring = PreferenceHelper.isMonitoringEnabled(this)
-        binding.switchMonitoring.isChecked = isMonitoring && overlayGranted
+        val shouldBeActive = isMonitoring && overlayGranted
 
-        if (isMonitoring && overlayGranted) {
-            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_active)
-            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_active))
-            if (hasNotificationPermission()) {
-                UnlockMonitorService.start(this)
-            }
-        } else {
-            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_inactive)
-            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_inactive))
-        }
+        setSwitchCheckedWithoutTriggering(shouldBeActive)
+        updateStatusText(shouldBeActive)
     }
 
     private fun hasOverlayPermission(): Boolean {
@@ -241,13 +318,6 @@ class MainActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    private fun checkAndStartServiceIfRequested() {
-        if (hasOverlayPermission()) {
-            UnlockMonitorService.start(this)
-            updatePermissionAndServiceUI()
         }
     }
 }

@@ -21,6 +21,7 @@ import com.taskpeek.app.R
 import com.taskpeek.app.data.AppDatabase
 import com.taskpeek.app.data.Task
 import com.taskpeek.app.util.DateUtils
+import com.taskpeek.app.util.PreferenceHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,13 @@ object TaskOverlayManager {
     @Volatile
     private var isUnlockSessionActive = false
 
+    // Synchronized in-memory task snapshot cache
+    @Volatile
+    private var cachedPendingTasks: List<Task>? = null
+
+    @Volatile
+    private var cachedDate: String? = null
+
     private var currentLoadingJob: Job? = null
     private var dismissRunnable: Runnable? = null
     private var hardDismissRunnable: Runnable? = null
@@ -57,6 +65,51 @@ object TaskOverlayManager {
 
     private fun getTimestamp(): String {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+    }
+
+    /**
+     * Invalidate cached task data so that next display queries fresh authoritative database state.
+     */
+    fun invalidateCache() {
+        cachedPendingTasks = null
+        cachedDate = null
+        Log.d(TAG, "Task cache invalidated")
+    }
+
+    /**
+     * Preload / warm task cache from Room database in the background.
+     */
+    fun warmCache(context: Context) {
+        val appContext = context.applicationContext
+        scope.launch {
+            try {
+                val todayStr = DateUtils.getTodayDateString()
+                val db = AppDatabase.getInstance(appContext)
+                val tasks = db.taskDao().getTodayPendingTasks(todayStr)
+                cachedPendingTasks = tasks
+                cachedDate = todayStr
+                Log.d(TAG, "Task cache warmed with ${tasks.size} tasks for $todayStr")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to warm task cache: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Called when monitoring is disabled by the user to immediately dismiss overlay and cancel pending work.
+     */
+    fun onMonitoringDisabled(context: Context) {
+        val appContext = context.applicationContext
+        val now = getTimestamp()
+        Log.d(TAG, "[$now] Monitoring disabled by user: stopping all overlay operations")
+
+        currentLoadingJob?.cancel()
+        currentLoadingJob = null
+        isUnlockSessionActive = false
+
+        mainHandler.post {
+            dismissOverlay(appContext, reason = "monitoring disabled by user")
+        }
     }
 
     /**
@@ -101,13 +154,19 @@ object TaskOverlayManager {
         val currentTime = System.currentTimeMillis()
         val now = getTimestamp()
 
-        // 1. Prevent duplicate broadcasts within the exact same unlock session
+        // 1. Verify that monitoring is enabled by the user
+        if (!PreferenceHelper.isMonitoringEnabled(appContext)) {
+            Log.d(TAG, "[$now] UNLOCK_EVENT_IGNORED: reason=monitoring disabled by user")
+            return
+        }
+
+        // 2. Prevent duplicate broadcasts within the exact same unlock session
         if (isUnlockSessionActive && (currentTime - lastUnlockTime < DUPLICATE_DEBOUNCE_MS)) {
             Log.d(TAG, "[$now] UNLOCK_EVENT_IGNORED: reason=duplicate event within same unlock session (delta=${currentTime - lastUnlockTime}ms < ${DUPLICATE_DEBOUNCE_MS}ms)")
             return
         }
 
-        // 2. Verify overlay permission
+        // 3. Verify overlay permission
         if (!Settings.canDrawOverlays(appContext)) {
             Log.w(TAG, "[$now] UNLOCK_EVENT_IGNORED: reason=SYSTEM_ALERT_WINDOW permission not granted")
             return
@@ -124,11 +183,23 @@ object TaskOverlayManager {
             try {
                 val todayStr = DateUtils.getTodayDateString()
                 val db = AppDatabase.getInstance(appContext)
+
+                // Query database for authoritative state
                 val pendingTasks = db.taskDao().getTodayPendingTasks(todayStr)
+                cachedPendingTasks = pendingTasks
+                cachedDate = todayStr
+
                 val fetchTime = getTimestamp()
                 Log.d(TAG, "[$fetchTime] Tasks loaded: count=${pendingTasks.size} for date=$todayStr")
 
                 withContext(Dispatchers.Main) {
+                    // Check if monitoring was disabled while query was running
+                    if (!PreferenceHelper.isMonitoringEnabled(appContext)) {
+                        val rejectTime = getTimestamp()
+                        Log.d(TAG, "[$rejectTime] OVERLAY_ATTACH_FAILED: reason=monitoring was disabled during task loading")
+                        return@withContext
+                    }
+
                     // Check if display is still interactive (user did not immediately turn screen off)
                     val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
                     val isInteractive = powerManager?.isInteractive ?: true

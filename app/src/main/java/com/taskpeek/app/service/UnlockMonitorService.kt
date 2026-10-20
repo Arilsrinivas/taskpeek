@@ -28,7 +28,6 @@ class UnlockMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        registerUnlockReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -41,7 +40,7 @@ class UnlockMonitorService : Service() {
             return START_NOT_STICKY
         }
 
-        // Verify that monitoring is enabled or requested
+        // Verify that monitoring is enabled or explicitly requested
         val isExplicitStart = (intent?.action == ACTION_START_MONITORING)
         val isPrefEnabled = PreferenceHelper.isMonitoringEnabled(this)
 
@@ -135,7 +134,8 @@ class UnlockMonitorService : Service() {
 
     private fun stopMonitoring() {
         PreferenceHelper.setMonitoringEnabled(this, false)
-        TaskOverlayManager.dismissOverlay(this, "monitoring disabled by user")
+        TaskOverlayManager.onMonitoringDisabled(this)
+        unregisterUnlockReceiver()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

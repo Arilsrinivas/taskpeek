@@ -1,21 +1,25 @@
 package com.taskpeek.app.util
 
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object DateUtils {
 
-    private val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    private val DISPLAY_FORMAT = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-    private val REFERENCE_DATE_FORMAT = SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
+    private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+    private val DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
+    private val REFERENCE_DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
 
     fun getTodayReferenceDateString(): String {
-        return REFERENCE_DATE_FORMAT.format(Date())
+        return LocalDate.now().format(REFERENCE_DATE_FORMATTER)
     }
 
     fun getTodayDateString(): String {
-        return DATE_FORMAT.format(Date())
+        return LocalDate.now().format(DATE_FORMATTER)
+    }
+
+    fun getTomorrowDateString(): String {
+        return LocalDate.now().plusDays(1).format(DATE_FORMATTER)
     }
 
     fun isToday(dateStr: String): Boolean {
@@ -27,8 +31,8 @@ object DateUtils {
             "Today"
         } else {
             try {
-                val date = DATE_FORMAT.parse(dateStr)
-                if (date != null) DISPLAY_FORMAT.format(date) else dateStr
+                val parsed = LocalDate.parse(dateStr, DATE_FORMATTER)
+                parsed.format(DISPLAY_FORMATTER)
             } catch (e: Exception) {
                 dateStr
             }

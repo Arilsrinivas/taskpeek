@@ -14,7 +14,8 @@ import com.taskpeek.app.util.DateUtils
 
 class TaskAdapter(
     private val onToggleComplete: (Task, Boolean) -> Unit,
-    private val onDelete: (Task) -> Unit
+    private val onDelete: (Task) -> Unit,
+    private val onEdit: (Task) -> Unit = {}
 ) : ListAdapter<Task, TaskAdapter.TaskViewHolder>(TaskDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TaskViewHolder {
@@ -85,6 +86,11 @@ class TaskAdapter(
                     binding.tvTaskPriority.background =
                         ContextCompat.getDrawable(context, R.drawable.bg_badge_medium)
                 }
+            }
+
+            // Item click to edit task
+            itemView.setOnClickListener {
+                onEdit(task)
             }
 
             binding.btnDeleteTask.setOnClickListener {

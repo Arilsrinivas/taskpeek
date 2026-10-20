@@ -16,7 +16,7 @@ interface TaskDao {
                 WHEN 'LOW' THEN 3 
                 ELSE 4 
             END, 
-            id ASC 
+            id DESC 
         LIMIT 3
     """)
     suspend fun getTodayPendingTasks(todayDate: String): List<Task>
