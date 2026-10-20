@@ -17,6 +17,9 @@ import com.taskpeek.app.TaskPeekApp
 import com.taskpeek.app.overlay.TaskOverlayManager
 import com.taskpeek.app.receiver.UnlockReceiver
 import com.taskpeek.app.util.PreferenceHelper
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class UnlockMonitorService : Service() {
 
@@ -25,16 +28,26 @@ class UnlockMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "UnlockMonitorService created")
         registerUnlockReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "UnlockMonitorService started")
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        Log.d(TAG, "[$now] SERVICE_STARTED: startId=$startId, flags=$flags, action=${intent?.action}")
 
         // Handle stop action if requested
         if (intent?.action == ACTION_STOP_MONITORING) {
             stopMonitoring()
+            return START_NOT_STICKY
+        }
+
+        // Verify that monitoring is enabled or requested
+        val isExplicitStart = (intent?.action == ACTION_START_MONITORING)
+        val isPrefEnabled = PreferenceHelper.isMonitoringEnabled(this)
+
+        if (!isPrefEnabled && !isExplicitStart) {
+            Log.d(TAG, "[$now] Monitoring not enabled in preferences; stopping service")
+            stopSelf()
             return START_NOT_STICKY
         }
 
@@ -56,30 +69,45 @@ class UnlockMonitorService : Service() {
             .setContentIntent(pendingIntent)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                TaskPeekApp.NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                TaskPeekApp.NOTIFICATION_ID,
-                notification,
-                0
-            )
-        } else {
-            startForeground(TaskPeekApp.NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    TaskPeekApp.NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    TaskPeekApp.NOTIFICATION_ID,
+                    notification,
+                    0
+                )
+            } else {
+                startForeground(TaskPeekApp.NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground failed: ${e.message}", e)
         }
+
+        // Ensure receiver is registered
+        registerUnlockReceiver()
 
         PreferenceHelper.setMonitoringEnabled(this, true)
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        Log.d(TAG, "[$now] onTaskRemoved: TaskPeek activity swiped from recents; service remains active")
     }
 
     private fun registerUnlockReceiver() {
         if (!isReceiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_USER_PRESENT)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(unlockReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -87,7 +115,8 @@ class UnlockMonitorService : Service() {
                 registerReceiver(unlockReceiver, filter)
             }
             isReceiverRegistered = true
-            Log.d(TAG, "UnlockReceiver registered dynamically")
+            val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+            Log.d(TAG, "[$now] RECEIVER_REGISTERED: actions=[ACTION_USER_PRESENT, ACTION_SCREEN_OFF, ACTION_SCREEN_ON]")
         }
     }
 
@@ -95,7 +124,8 @@ class UnlockMonitorService : Service() {
         if (isReceiverRegistered) {
             try {
                 unregisterReceiver(unlockReceiver)
-                Log.d(TAG, "UnlockReceiver unregistered")
+                val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+                Log.d(TAG, "[$now] RECEIVER_UNREGISTERED: receiver detached from context")
             } catch (e: Exception) {
                 Log.w(TAG, "Exception unregistering receiver", e)
             }
@@ -105,22 +135,23 @@ class UnlockMonitorService : Service() {
 
     private fun stopMonitoring() {
         PreferenceHelper.setMonitoringEnabled(this, false)
-        TaskOverlayManager.dismissOverlay(this)
+        TaskOverlayManager.dismissOverlay(this, "monitoring disabled by user")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "UnlockMonitorService destroyed")
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        Log.d(TAG, "[$now] SERVICE_DESTROYED: monitoring service stopped")
         unregisterUnlockReceiver()
-        TaskOverlayManager.dismissOverlay(this)
+        TaskOverlayManager.dismissOverlay(this, "service destroyed")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val TAG = "TaskPeekService"
+        private const val TAG = "TaskPeekUnlock"
         const val ACTION_START_MONITORING = "com.taskpeek.app.START_MONITORING"
         const val ACTION_STOP_MONITORING = "com.taskpeek.app.STOP_MONITORING"
 

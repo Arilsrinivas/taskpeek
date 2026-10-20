@@ -5,6 +5,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -16,13 +17,14 @@ import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import com.taskpeek.app.R
 import com.taskpeek.app.data.AppDatabase
 import com.taskpeek.app.data.Task
 import com.taskpeek.app.util.DateUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,9 +34,9 @@ import java.util.Locale
 
 object TaskOverlayManager {
 
-    private const val TAG = "TaskPeekOverlay"
+    private const val TAG = "TaskPeekUnlock"
     private const val DISPLAY_DURATION_MS = 3000L
-    private const val DEBOUNCE_THRESHOLD_MS = 1500L
+    private const val DUPLICATE_DEBOUNCE_MS = 400L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -45,39 +47,105 @@ object TaskOverlayManager {
     @Volatile
     private var isShowing = false
 
+    @Volatile
+    private var isUnlockSessionActive = false
+
+    private var currentLoadingJob: Job? = null
     private var dismissRunnable: Runnable? = null
+    private var hardDismissRunnable: Runnable? = null
     private var lastUnlockTime = 0L
+
+    private fun getTimestamp(): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+    }
+
+    /**
+     * Called when the screen turns off. Resets active unlock session and cleans up any active overlay.
+     */
+    fun onScreenOff(context: Context) {
+        val appContext = context.applicationContext
+        val now = getTimestamp()
+
+        // Cancel any pending background task loading job
+        currentLoadingJob?.cancel()
+        currentLoadingJob = null
+
+        // Reset unlock session and debounce state so subsequent unlock is immediately accepted
+        isUnlockSessionActive = false
+
+        // Immediately dismiss and remove any active overlay
+        mainHandler.post {
+            dismissOverlay(appContext, reason = "SCREEN_OFF (screen turned off)")
+        }
+    }
+
+    /**
+     * Called when the screen turns on.
+     */
+    fun onScreenOn(context: Context) {
+        // Supplementary diagnostic signal; overlay is not shown until keyguard is dismissed
+    }
+
+    /**
+     * Called when the user presents/dismisses the keyguard.
+     */
+    fun onUserPresent(context: Context) {
+        triggerUnlock(context)
+    }
 
     /**
      * Triggered when a phone unlock event is detected.
      */
     fun triggerUnlock(context: Context) {
+        val appContext = context.applicationContext
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastUnlockTime < DEBOUNCE_THRESHOLD_MS) {
-            Log.d(TAG, "Duplicate unlock event ignored by debounce (${currentTime - lastUnlockTime}ms)")
+        val now = getTimestamp()
+
+        // 1. Prevent duplicate broadcasts within the exact same unlock session
+        if (isUnlockSessionActive && (currentTime - lastUnlockTime < DUPLICATE_DEBOUNCE_MS)) {
+            Log.d(TAG, "[$now] UNLOCK_EVENT_IGNORED: reason=duplicate event within same unlock session (delta=${currentTime - lastUnlockTime}ms < ${DUPLICATE_DEBOUNCE_MS}ms)")
             return
         }
+
+        // 2. Verify overlay permission
+        if (!Settings.canDrawOverlays(appContext)) {
+            Log.w(TAG, "[$now] UNLOCK_EVENT_IGNORED: reason=SYSTEM_ALERT_WINDOW permission not granted")
+            return
+        }
+
+        isUnlockSessionActive = true
         lastUnlockTime = currentTime
+        Log.d(TAG, "[$now] UNLOCK_EVENT_ACCEPTED: proceeding to load tasks for display")
 
-        // Verify overlay permission
-        if (!Settings.canDrawOverlays(context)) {
-            Log.w(TAG, "Cannot show overlay: SYSTEM_ALERT_WINDOW permission not granted")
-            return
-        }
+        // Cancel any previous pending load job
+        currentLoadingJob?.cancel()
 
-        // Query database on background thread, then display on main thread
-        scope.launch {
+        currentLoadingJob = scope.launch {
             try {
                 val todayStr = DateUtils.getTodayDateString()
-                val db = AppDatabase.getInstance(context)
+                val db = AppDatabase.getInstance(appContext)
                 val pendingTasks = db.taskDao().getTodayPendingTasks(todayStr)
-                Log.d(TAG, "Retrieved ${pendingTasks.size} pending tasks for today ($todayStr)")
+                val fetchTime = getTimestamp()
+                Log.d(TAG, "[$fetchTime] Tasks loaded: count=${pendingTasks.size} for date=$todayStr")
 
                 withContext(Dispatchers.Main) {
-                    showOverlay(context, pendingTasks)
+                    // Check if display is still interactive (user did not immediately turn screen off)
+                    val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    val isInteractive = powerManager?.isInteractive ?: true
+                    if (!isInteractive) {
+                        val rejectTime = getTimestamp()
+                        Log.d(TAG, "[$rejectTime] OVERLAY_ATTACH_FAILED: reason=screen is no longer interactive (device re-locked before display)")
+                        return@withContext
+                    }
+
+                    showOverlay(appContext, pendingTasks)
                 }
+            } catch (e: CancellationException) {
+                val cancelTime = getTimestamp()
+                Log.d(TAG, "[$cancelTime] Task loading cancelled: reason=superseded by newer event or screen off")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load tasks for overlay", e)
+                val errTime = getTimestamp()
+                Log.e(TAG, "[$errTime] OVERLAY_ATTACH_FAILED: reason=database query exception: ${e.message}", e)
             }
         }
     }
@@ -87,17 +155,21 @@ object TaskOverlayManager {
      */
     @Synchronized
     fun showOverlay(context: Context, tasks: List<Task>) {
-        if (!Settings.canDrawOverlays(context)) {
-            Log.w(TAG, "Permission denied for drawing overlay")
+        val appContext = context.applicationContext
+        val now = getTimestamp()
+        Log.d(TAG, "[$now] OVERLAY_ATTACH_REQUESTED: taskCount=${tasks.size}")
+
+        if (!Settings.canDrawOverlays(appContext)) {
+            Log.w(TAG, "[$now] OVERLAY_ATTACH_FAILED: reason=permission denied for drawing overlay")
             return
         }
 
         // Clean up any existing overlay view or timer
-        dismissOverlay(context)
+        dismissOverlay(appContext, reason = "superseded by new overlay")
 
         try {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val inflater = LayoutInflater.from(context)
+            val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val inflater = LayoutInflater.from(appContext)
             val view = inflater.inflate(R.layout.view_task_overlay, null)
 
             // Bind Views
@@ -231,7 +303,9 @@ object TaskOverlayManager {
             windowManager.addView(view, params)
             overlayView = view
             isShowing = true
-            Log.d(TAG, "Task overlay added to WindowManager; starting 200ms fade in")
+
+            val attachTime = getTimestamp()
+            Log.d(TAG, "[$attachTime] OVERLAY_ATTACHED: view added to WindowManager, starting 200ms fade in")
 
             // Fade in over 200 milliseconds
             view.animate()
@@ -239,24 +313,39 @@ object TaskOverlayManager {
                 .setDuration(200L)
                 .start()
 
+            // Retain reference to this specific view instance to avoid race condition with subsequent views
+            val targetView = view
+
             // Schedule smooth 250ms fade out before 3-second automatic dismissal
             val fadeOutRunnable = Runnable {
-                Log.d(TAG, "Starting 250ms fade out before dismissal")
-                overlayView?.animate()
-                    ?.alpha(0f)
-                    ?.setDuration(250L)
-                    ?.withEndAction {
-                        Log.d(TAG, "Fade out complete: detaching overlay from WindowManager")
-                        dismissOverlay(context)
+                val fadeTime = getTimestamp()
+                Log.d(TAG, "[$fadeTime] Starting 250ms fade out before dismissal")
+                targetView.animate()
+                    .alpha(0f)
+                    .setDuration(250L)
+                    .withEndAction {
+                        if (overlayView === targetView) {
+                            dismissOverlay(appContext, reason = "normal 3.0s fade-out complete")
+                        }
                     }
-                    ?.start()
+                    .start()
             }
             dismissRunnable = fadeOutRunnable
             mainHandler.postDelayed(fadeOutRunnable, DISPLAY_DURATION_MS - 250L)
 
+            // Hard timeout fallback at 3,000ms
+            val hardDismissRunnable = Runnable {
+                if (overlayView === targetView) {
+                    dismissOverlay(appContext, reason = "normal 3.0s timeout completion")
+                }
+            }
+            this.hardDismissRunnable = hardDismissRunnable
+            mainHandler.postDelayed(hardDismissRunnable, DISPLAY_DURATION_MS)
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error displaying task overlay", e)
-            dismissOverlay(context)
+            val failTime = getTimestamp()
+            Log.e(TAG, "[$failTime] OVERLAY_ATTACH_FAILED: reason=${e.message}", e)
+            dismissOverlay(appContext, reason = "attach exception")
         }
     }
 
@@ -264,22 +353,33 @@ object TaskOverlayManager {
      * Safely dismiss and remove the overlay view, cancelling timers and ongoing animations.
      */
     @Synchronized
-    fun dismissOverlay(context: Context) {
+    fun dismissOverlay(context: Context, reason: String = "unspecified") {
+        val appContext = context.applicationContext
+        val now = getTimestamp()
+
         dismissRunnable?.let {
             mainHandler.removeCallbacks(it)
             dismissRunnable = null
+        }
+        hardDismissRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            hardDismissRunnable = null
         }
 
         overlayView?.let { view ->
             try {
                 view.animate().cancel()
-                val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                if (view.isAttachedToWindow) {
+                val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                if (view.parent != null || view.isAttachedToWindow) {
                     windowManager.removeView(view)
-                    Log.d(TAG, "Overlay view detached from WindowManager")
+                    Log.d(TAG, "[$now] OVERLAY_REMOVED: reason=$reason")
+                } else {
+                    Log.d(TAG, "[$now] OVERLAY_REMOVED: view already detached (reason=$reason)")
                 }
+            } catch (e: IllegalArgumentException) {
+                Log.d(TAG, "[$now] OVERLAY_REMOVED: view not attached to window manager (reason=$reason)")
             } catch (e: Exception) {
-                Log.w(TAG, "Exception while removing overlay view: ${e.message}")
+                Log.w(TAG, "[$now] Exception while removing overlay view: ${e.message}")
             }
             overlayView = null
         }
