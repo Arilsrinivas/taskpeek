@@ -24,6 +24,7 @@ import com.taskpeek.app.service.UnlockMonitorService
 import com.taskpeek.app.ui.TaskAdapter
 import com.taskpeek.app.util.DateUtils
 import com.taskpeek.app.util.PreferenceHelper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -35,6 +36,7 @@ class MainActivity : AppCompatActivity() {
 
     private var showOnlyToday = true
     private var isProgrammaticSwitchChange = false
+    private var observeTasksJob: Job? = null
 
     // Permission launcher for overlay permission (Android 6.0+)
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -81,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionAndServiceUI()
+        observeTasks()
         // Preload / warm cache for today's tasks
         TaskOverlayManager.warmCache(this)
     }
@@ -258,7 +261,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun observeTasks() {
-        lifecycleScope.launch {
+        observeTasksJob?.cancel()
+        observeTasksJob = lifecycleScope.launch {
             val flow = if (showOnlyToday) {
                 database.taskDao().getTodayTasksFlow(DateUtils.getTodayDateString())
             } else {

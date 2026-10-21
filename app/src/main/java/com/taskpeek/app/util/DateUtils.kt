@@ -26,15 +26,26 @@ object DateUtils {
         return dateStr == getTodayDateString()
     }
 
+    fun isYesterday(dateStr: String): Boolean {
+        return try {
+            val taskDate = LocalDate.parse(dateStr, DATE_FORMATTER)
+            taskDate == LocalDate.now().minusDays(1)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun formatDisplayDate(dateStr: String): String {
-        return if (isToday(dateStr)) {
-            "Today"
-        } else {
-            try {
-                val parsed = LocalDate.parse(dateStr, DATE_FORMATTER)
-                parsed.format(DISPLAY_FORMATTER)
-            } catch (e: Exception) {
-                dateStr
+        return when {
+            isToday(dateStr) -> "Today"
+            isYesterday(dateStr) -> "Yesterday"
+            else -> {
+                try {
+                    val parsed = LocalDate.parse(dateStr, DATE_FORMATTER)
+                    parsed.format(DISPLAY_FORMATTER)
+                } catch (e: Exception) {
+                    dateStr
+                }
             }
         }
     }

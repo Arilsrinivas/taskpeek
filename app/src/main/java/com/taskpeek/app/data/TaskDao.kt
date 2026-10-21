@@ -8,7 +8,7 @@ interface TaskDao {
 
     @Query("""
         SELECT * FROM tasks 
-        WHERE date = :todayDate AND isCompleted = 0 
+        WHERE date <= :todayDate AND isCompleted = 0 
         ORDER BY 
             CASE priority 
                 WHEN 'HIGH' THEN 1 
@@ -16,12 +16,17 @@ interface TaskDao {
                 WHEN 'LOW' THEN 3 
                 ELSE 4 
             END, 
+            date DESC,
             id DESC 
         LIMIT 3
     """)
     suspend fun getTodayPendingTasks(todayDate: String): List<Task>
 
-    @Query("SELECT * FROM tasks WHERE date = :todayDate ORDER BY isCompleted ASC, id DESC")
+    @Query("""
+        SELECT * FROM tasks 
+        WHERE (date = :todayDate) OR (date < :todayDate AND isCompleted = 0) 
+        ORDER BY isCompleted ASC, date DESC, id DESC
+    """)
     fun getTodayTasksFlow(todayDate: String): Flow<List<Task>>
 
     @Query("SELECT * FROM tasks ORDER BY isCompleted ASC, date ASC, id DESC")

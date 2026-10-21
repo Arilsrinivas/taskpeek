@@ -34,6 +34,13 @@ class UnlockReceiver : BroadcastReceiver() {
                 Log.d(TAG, "[$now] USER_PRESENT_RECEIVED: keyguard dismissed by user")
                 TaskOverlayManager.onUserPresent(context)
             }
+            Intent.ACTION_DATE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED -> {
+                Log.d(TAG, "[$now] DATE/TIME_CHANGED_RECEIVED ($action): invalidating and warming cache for new date")
+                TaskOverlayManager.invalidateCache()
+                TaskOverlayManager.warmCache(context)
+            }
             else -> {
                 Log.d(TAG, "[$now] Unexpected broadcast received: $action")
             }
