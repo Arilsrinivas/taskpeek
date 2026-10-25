@@ -1,319 +1,412 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="@color/bg_main">
 
-    <androidx.core.widget.NestedScrollView
+    <!-- Main Content Area -->
+    <RelativeLayout
+        android:id="@+id/mainContentContainer"
         android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Top Navigation Bar -->
+        <RelativeLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:id="@+id/btnMenu"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_menu"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Menu" />
+
+            <ImageView
+                android:id="@+id/btnSearch"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_search"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Search" />
+
+        </RelativeLayout>
+
+        <!-- Search Bar (Collapsible) -->
+        <LinearLayout
+            android:id="@+id/layoutSearchBar"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_below="@id/topBar"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/etSearchQuery"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input_field"
+                android:hint="Search tasks..."
+                android:textColorHint="@color/text_muted"
+                android:textColor="@color/text_primary"
+                android:textSize="14.5sp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:inputType="text"
+                android:imeOptions="actionSearch" />
+
+            <ImageView
+                android:id="@+id/btnCloseSearch"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_close"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Close Search" />
+
+        </LinearLayout>
+
+        <!-- Tab Content Container -->
+        <FrameLayout
+            android:id="@+id/tabContentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@id/layoutSearchBar">
+
+            <!-- Today Tab View -->
+            <include
+                android:id="@+id/viewTodayTab"
+                layout="@layout/layout_today_tab"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="visible" />
+
+            <!-- Calendar Tab View -->
+            <include
+                android:id="@+id/viewCalendarTab"
+                layout="@layout/layout_calendar_tab"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <!-- Stats Tab View -->
+            <include
+                android:id="@+id/viewStatsTab"
+                layout="@layout/layout_stats_tab"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- Floating White Add Task Button (Lower-Right) -->
+        <ImageButton
+            android:id="@+id/fabAddTask"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentBottom="true"
+            android:layout_marginEnd="20dp"
+            android:layout_marginBottom="80dp"
+            android:background="@drawable/bg_fab_add"
+            android:src="@drawable/ic_plus"
+            android:contentDescription="Add Task"
+            android:elevation="6dp" />
+
+        <!-- Bottom Navigation Bar -->
+        <LinearLayout
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_alignParentBottom="true"
+            android:background="@color/bg_main"
+            android:orientation="horizontal">
+
+            <!-- Top border line -->
+            <!-- Today Tab -->
+            <LinearLayout
+                android:id="@+id/tabBtnToday"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/ivTabToday"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_today"
+                    android:contentDescription="Today" />
+
+                <TextView
+                    android:id="@+id/tvTabToday"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Today"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <!-- Calendar Tab -->
+            <LinearLayout
+                android:id="@+id/tabBtnCalendar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/ivTabCalendar"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_calendar"
+                    android:contentDescription="Calendar" />
+
+                <TextView
+                    android:id="@+id/tvTabCalendar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Calendar"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11.5sp" />
+
+            </LinearLayout>
+
+            <!-- Stats Tab -->
+            <LinearLayout
+                android:id="@+id/tabBtnStats"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/ivTabStats"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_stats"
+                    android:contentDescription="Stats" />
+
+                <TextView
+                    android:id="@+id/tvTabStats"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Stats"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11.5sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Divider line above bottom nav -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_above="@id/bottomNav"
+            android:background="@color/border_subtle" />
+
+    </RelativeLayout>
+
+    <!-- Navigation Drawer Content -->
+    <LinearLayout
+        android:id="@+id/navDrawerContent"
+        android:layout_width="280dp"
         android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:layout_gravity="start"
+        android:background="@color/bg_main"
+        android:orientation="vertical"
+        android:paddingTop="36dp"
+        android:paddingBottom="24dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
 
-            <!-- App Title Bar -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="16dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/app_name"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary" />
-
-                <!-- Quick Test Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnTestOverlay"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Test Overlay (3s)"
-                    android:textSize="12sp"
-                    app:cornerRadius="8dp" />
-            </LinearLayout>
-
-            <!-- Unlock Monitor Status & Control Card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/divider"
-                app:strokeWidth="1dp"
-                app:cardBackgroundColor="@color/surface">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/title_unlock_monitor"
-                                android:textSize="17sp"
-                                android:textStyle="bold"
-                                android:textColor="@color/text_primary" />
-
-                            <TextView
-                                android:id="@+id/tvMonitorStatus"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/status_monitoring_inactive"
-                                android:textSize="13sp"
-                                android:textColor="@color/status_inactive"
-                                android:layout_marginTop="2dp" />
-                        </LinearLayout>
-
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/switchMonitoring"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/desc_unlock_monitor"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginTop="8dp" />
-
-                    <!-- Overlay Permission Warning / Action Banner -->
-                    <LinearLayout
-                        android:id="@+id/bannerOverlayPermission"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:background="@drawable/bg_badge_high"
-                        android:padding="10dp"
-                        android:layout_marginTop="12dp"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="System Alert Window permission required to display task overlay on unlock."
-                            android:textSize="12sp"
-                            android:textColor="@color/priority_high" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnGrantOverlay"
-                            style="@style/Widget.Material3.Button"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Grant"
-                            android:textSize="11sp"
-                            android:backgroundTint="@color/priority_high"
-                            app:cornerRadius="6dp" />
-                    </LinearLayout>
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Add Task Card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/divider"
-                app:strokeWidth="1dp"
-                app:cardBackgroundColor="@color/surface">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/section_add_task"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:layout_marginBottom="10dp" />
-
-                    <!-- Title Input -->
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilTaskTitle"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_task_title">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etTaskTitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="textCapSentences"
-                            android:maxLines="2" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <!-- Options: Today Checkbox & Priority -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="8dp">
-
-                        <CheckBox
-                            android:id="@+id/cbAssignToday"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/chk_assign_today"
-                            android:checked="true"
-                            android:textColor="@color/text_primary" />
-
-                        <View
-                            android:layout_width="0dp"
-                            android:layout_height="1dp"
-                            android:layout_weight="1" />
-
-                        <!-- Priority Selection Chips -->
-                        <com.google.android.material.chip.ChipGroup
-                            android:id="@+id/chipGroupPriority"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            app:singleSelection="true">
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipLow"
-                                style="@style/Widget.Material3.Chip.Filter"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Low"
-                                android:textSize="12sp" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipMedium"
-                                style="@style/Widget.Material3.Chip.Filter"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Med"
-                                android:checked="true"
-                                android:textSize="12sp" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipHigh"
-                                style="@style/Widget.Material3.Chip.Filter"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="High"
-                                android:textSize="12sp" />
-                        </com.google.android.material.chip.ChipGroup>
-                    </LinearLayout>
-
-                    <!-- Submit Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnAddTask"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/btn_add_task"
-                        android:layout_marginTop="12dp"
-                        android:backgroundTint="@color/accent"
-                        app:cornerRadius="8dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Tasks List Header and Filter -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-
-                <TextView
-                    android:id="@+id/tvTasksHeader"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/section_tasks"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary" />
-
-                <!-- Filter Toggle: Today / All -->
-                <com.google.android.material.button.MaterialButtonToggleGroup
-                    android:id="@+id/toggleTaskFilter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:singleSelection="true">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnFilterToday"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tab_today"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnFilterAll"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/tab_all"
-                        android:textSize="12sp" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
-            </LinearLayout>
-
-            <!-- Empty State -->
             <TextView
-                android:id="@+id/tvEmptyList"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/empty_tasks"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:paddingTop="32dp"
-                android:paddingBottom="32dp"
-                android:visibility="gone" />
+                android:text="TaskPeek"
+                android:textColor="@color/text_primary"
+                android:textSize="26sp"
+                android:textStyle="bold" />
 
-            <!-- Task List RecyclerView -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvTasks"
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
-                tools:listitem="@layout/item_task" />
+                android:text="Monochrome Task Manager"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:layout_marginTop="2dp" />
 
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/border_subtle" />
+
+        <!-- Drawer Item: Categories -->
+        <LinearLayout
+            android:id="@+id/drawerItemCategories"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_folder"
+                android:contentDescription="Categories" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Categories"
+                android:textColor="@color/text_primary"
+                android:textSize="15.5sp" />
+
+        </LinearLayout>
+
+        <!-- Drawer Item: Completed -->
+        <LinearLayout
+            android:id="@+id/drawerItemCompleted"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_circle_checked"
+                android:contentDescription="Completed" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Completed Tasks"
+                android:textColor="@color/text_primary"
+                android:textSize="15.5sp" />
+
+        </LinearLayout>
+
+        <!-- Drawer Item: Settings -->
+        <LinearLayout
+            android:id="@+id/drawerItemSettings"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_lock"
+                android:contentDescription="Settings" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Settings &amp; Monitor"
+                android:textColor="@color/text_primary"
+                android:textSize="15.5sp" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/border_subtle" />
+
+        <!-- Drawer Item: Test Overlay -->
+        <LinearLayout
+            android:id="@+id/drawerItemTestOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_stats"
+                android:contentDescription="Test Overlay" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Test Overlay (3s)"
+                android:textColor="@color/text_secondary"
+                android:textSize="14.5sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

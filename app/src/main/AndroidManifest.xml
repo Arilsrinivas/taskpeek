@@ -30,6 +30,32 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AddTaskActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".TaskDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".EditTaskActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".CategoriesActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".CompletedActivity"
+            android:exported="false" />
+
         <!-- Foreground Monitoring Service -->
         <service
             android:name=".service.UnlockMonitorService"

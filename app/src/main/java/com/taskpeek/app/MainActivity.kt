@@ -7,65 +7,87 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
-import android.widget.EditText
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.taskpeek.app.data.AppDatabase
 import com.taskpeek.app.data.Task
 import com.taskpeek.app.databinding.ActivityMainBinding
 import com.taskpeek.app.overlay.TaskOverlayManager
 import com.taskpeek.app.service.UnlockMonitorService
+import com.taskpeek.app.ui.CalendarAdapter
 import com.taskpeek.app.ui.TaskAdapter
 import com.taskpeek.app.util.DateUtils
 import com.taskpeek.app.util.PreferenceHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var database: AppDatabase
-    private lateinit var taskAdapter: TaskAdapter
 
-    private var showOnlyToday = true
-    private var isProgrammaticSwitchChange = false
+    private lateinit var todayTaskAdapter: TaskAdapter
+    private lateinit var calendarTaskAdapter: TaskAdapter
+    private lateinit var calendarAdapter: CalendarAdapter
+
+    private var currentTab = TAB_TODAY
     private var observeTasksJob: Job? = null
+    private var observeCalendarJob: Job? = null
+    private var observeStatsJob: Job? = null
+
+    // Calendar state
+    private var currentYearMonth: YearMonth = YearMonth.now()
+    private var selectedCalendarDate: LocalDate = LocalDate.now()
+
+    // Search state
+    private var searchQuery: String = ""
+    private var fullTodayTaskList: List<Task> = emptyList()
+
+    // Stats period
+    private var statsPeriod = "This Week"
+
+    private val dbDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+    private val displayDateFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.US)
+    private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)
 
     // Permission launcher for overlay permission (Android 6.0+)
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (hasOverlayPermission()) {
-            if (PreferenceHelper.isMonitoringEnabled(this)) {
-                UnlockMonitorService.start(this)
-            }
+        if (hasOverlayPermission() && PreferenceHelper.isMonitoringEnabled(this)) {
+            UnlockMonitorService.start(this)
         }
-        updatePermissionAndServiceUI()
     }
 
     // Permission launcher for notifications (Android 13+)
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            if (PreferenceHelper.isMonitoringEnabled(this) && hasOverlayPermission()) {
-                UnlockMonitorService.start(this)
-            }
-        } else {
-            Toast.makeText(
-                this,
-                "Notification permission is needed for the background monitor.",
-                Toast.LENGTH_LONG
-            ).show()
+        if (isGranted && PreferenceHelper.isMonitoringEnabled(this) && hasOverlayPermission()) {
+            UnlockMonitorService.start(this)
         }
-        updatePermissionAndServiceUI()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,120 +97,325 @@ class MainActivity : AppCompatActivity() {
 
         database = AppDatabase.getInstance(this)
 
-        setupRecyclerView()
-        setupListeners()
-        observeTasks()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.mainContentContainer) { _, insets ->
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            binding.topBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                topMargin = statusBarInsets.top
+            }
+            binding.bottomNav.updatePadding(bottom = navBarInsets.bottom)
+            binding.navDrawerContent.updatePadding(top = statusBarInsets.top, bottom = navBarInsets.bottom)
+            insets
+        }
+
+        setupTodayTab()
+        setupCalendarTab()
+        setupStatsTab()
+        setupNavigationAndDrawer()
+        setupSearch()
+        checkPermissionsAndStartService()
+
+        switchToTab(TAB_TODAY)
     }
 
     override fun onResume() {
         super.onResume()
-        updatePermissionAndServiceUI()
-        observeTasks()
-        // Preload / warm cache for today's tasks
+        observeTodayTasks()
+        refreshCalendarDays()
+        refreshStats()
         TaskOverlayManager.warmCache(this)
     }
 
-    private fun setupRecyclerView() {
-        taskAdapter = TaskAdapter(
+    private fun checkPermissionsAndStartService() {
+        if (PreferenceHelper.isMonitoringEnabled(this)) {
+            if (hasOverlayPermission() && hasNotificationPermission()) {
+                UnlockMonitorService.start(this)
+            }
+        }
+    }
+
+    // ==========================================
+    // 1. TODAY TAB
+    // ==========================================
+
+    private fun setupTodayTab() {
+        binding.viewTodayTab.tvTodayDateSubtitle.text = LocalDate.now().format(displayDateFormatter)
+
+        todayTaskAdapter = TaskAdapter(
             onToggleComplete = { task, isCompleted ->
                 lifecycleScope.launch {
-                    database.taskDao().setTaskCompleted(task.id, isCompleted)
+                    val completedTime = if (isCompleted) System.currentTimeMillis() else 0L
+                    database.taskDao().setTaskCompletedWithTime(task.id, isCompleted, completedTime)
                     TaskOverlayManager.invalidateCache()
                     TaskOverlayManager.warmCache(this@MainActivity)
                 }
             },
-            onDelete = { task ->
-                lifecycleScope.launch {
-                    database.taskDao().deleteTask(task)
-                    TaskOverlayManager.invalidateCache()
-                    TaskOverlayManager.warmCache(this@MainActivity)
+            onTaskClick = { task ->
+                val intent = Intent(this, TaskDetailActivity::class.java).apply {
+                    putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.id)
                 }
-            },
-            onEdit = { task ->
-                showEditTaskDialog(task)
+                startActivity(intent)
             }
         )
 
-        binding.rvTasks.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = taskAdapter
+        binding.viewTodayTab.rvTodayTasks.layoutManager = LinearLayoutManager(this)
+        binding.viewTodayTab.rvTodayTasks.adapter = todayTaskAdapter
+
+        observeTodayTasks()
+    }
+
+    private fun observeTodayTasks() {
+        observeTasksJob?.cancel()
+        observeTasksJob = lifecycleScope.launch {
+            val todayStr = DateUtils.getTodayDateString()
+            database.taskDao().getTodayTasksFlow(todayStr).collectLatest { tasks ->
+                fullTodayTaskList = tasks
+                applySearchFilter()
+            }
         }
     }
 
-    private fun showEditTaskDialog(task: Task) {
-        val input = EditText(this).apply {
-            setText(task.title)
-            setSelection(text.length)
-            setPadding(48, 32, 48, 32)
+    private fun applySearchFilter() {
+        val filtered = if (searchQuery.isBlank()) {
+            fullTodayTaskList
+        } else {
+            fullTodayTaskList.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                it.category.contains(searchQuery, ignoreCase = true) ||
+                it.description.contains(searchQuery, ignoreCase = true)
+            }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("Edit Task")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val newTitle = input.text.toString().trim()
-                if (newTitle.isNotEmpty()) {
-                    lifecycleScope.launch {
-                        val updatedTask = task.copy(title = newTitle)
-                        database.taskDao().updateTask(updatedTask)
-                        TaskOverlayManager.invalidateCache()
-                        TaskOverlayManager.warmCache(this@MainActivity)
-                        Toast.makeText(this@MainActivity, "Task updated!", Toast.LENGTH_SHORT).show()
+        todayTaskAdapter.submitList(filtered)
+        val taskCount = filtered.size
+        binding.viewTodayTab.tvTodayTaskCount.text = "$taskCount ${if (taskCount == 1) "task" else "tasks"}"
+        binding.viewTodayTab.tvEmptyToday.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    // ==========================================
+    // 2. CALENDAR TAB
+    // ==========================================
+
+    private fun setupCalendarTab() {
+        calendarAdapter = CalendarAdapter { selectedDate ->
+            selectedCalendarDate = selectedDate
+            refreshCalendarDays()
+            observeTasksForCalendarDate()
+        }
+
+        binding.viewCalendarTab.rvCalendarGrid.layoutManager = GridLayoutManager(this, 7)
+        binding.viewCalendarTab.rvCalendarGrid.adapter = calendarAdapter
+
+        calendarTaskAdapter = TaskAdapter(
+            onToggleComplete = { task, isCompleted ->
+                lifecycleScope.launch {
+                    val completedTime = if (isCompleted) System.currentTimeMillis() else 0L
+                    database.taskDao().setTaskCompletedWithTime(task.id, isCompleted, completedTime)
+                    TaskOverlayManager.invalidateCache()
+                    TaskOverlayManager.warmCache(this@MainActivity)
+                }
+            },
+            onTaskClick = { task ->
+                val intent = Intent(this, TaskDetailActivity::class.java).apply {
+                    putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.id)
+                }
+                startActivity(intent)
+            }
+        )
+
+        binding.viewCalendarTab.rvCalendarTasks.layoutManager = LinearLayoutManager(this)
+        binding.viewCalendarTab.rvCalendarTasks.adapter = calendarTaskAdapter
+
+        binding.viewCalendarTab.btnPrevMonth.setOnClickListener {
+            currentYearMonth = currentYearMonth.minusMonths(1)
+            refreshCalendarDays()
+        }
+
+        binding.viewCalendarTab.btnNextMonth.setOnClickListener {
+            currentYearMonth = currentYearMonth.plusMonths(1)
+            refreshCalendarDays()
+        }
+
+        refreshCalendarDays()
+        observeTasksForCalendarDate()
+    }
+
+    private fun refreshCalendarDays() {
+        binding.viewCalendarTab.tvCurrentMonthYear.text = currentYearMonth.format(monthYearFormatter)
+
+        lifecycleScope.launch {
+            val allTasks = database.taskDao().getAllTasks()
+            val taskDates = allTasks.map { it.date }.toSet()
+
+            val daysList = mutableListOf<CalendarAdapter.DayModel>()
+            val firstDayOfMonth = currentYearMonth.atDay(1)
+            val daysInMonth = currentYearMonth.lengthOfMonth()
+
+            // Sunday = 7 in DayOfWeek % 7 = 0
+            val startDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7
+
+            // Previous month padding
+            val prevYearMonth = currentYearMonth.minusMonths(1)
+            val prevMonthDays = prevYearMonth.lengthOfMonth()
+            for (i in startDayOfWeek - 1 downTo 0) {
+                val date = prevYearMonth.atDay(prevMonthDays - i)
+                val hasTasks = taskDates.contains(date.format(dbDateFormatter))
+                daysList.add(CalendarAdapter.DayModel(date, isCurrentMonth = false, isSelected = (date == selectedCalendarDate), hasTasks = hasTasks))
+            }
+
+            // Current month days
+            for (day in 1..daysInMonth) {
+                val date = currentYearMonth.atDay(day)
+                val hasTasks = taskDates.contains(date.format(dbDateFormatter))
+                daysList.add(CalendarAdapter.DayModel(date, isCurrentMonth = true, isSelected = (date == selectedCalendarDate), hasTasks = hasTasks))
+            }
+
+            // Next month trailing days to complete full grid
+            val remaining = (7 - (daysList.size % 7)) % 7
+            val nextYearMonth = currentYearMonth.plusMonths(1)
+            for (day in 1..remaining) {
+                val date = nextYearMonth.atDay(day)
+                val hasTasks = taskDates.contains(date.format(dbDateFormatter))
+                daysList.add(CalendarAdapter.DayModel(date, isCurrentMonth = false, isSelected = (date == selectedCalendarDate), hasTasks = hasTasks))
+            }
+
+            calendarAdapter.submitDays(daysList)
+        }
+    }
+
+    private fun observeTasksForCalendarDate() {
+        observeCalendarJob?.cancel()
+        val dateStr = selectedCalendarDate.format(dbDateFormatter)
+        binding.viewCalendarTab.tvCalendarSelectedDate.text = selectedCalendarDate.format(displayDateFormatter)
+
+        observeCalendarJob = lifecycleScope.launch {
+            database.taskDao().getTasksForDateFlow(dateStr).collectLatest { tasks ->
+                calendarTaskAdapter.submitList(tasks)
+                val count = tasks.size
+                binding.viewCalendarTab.tvCalendarTaskCount.text = "$count ${if (count == 1) "task" else "tasks"}"
+                binding.viewCalendarTab.tvEmptyCalendarTasks.visibility = if (tasks.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    // ==========================================
+    // 3. STATS TAB
+    // ==========================================
+
+    private fun setupStatsTab() {
+        binding.viewStatsTab.btnPeriodSelector.setOnClickListener {
+            val periods = arrayOf("This Week", "This Month", "All Time")
+            AlertDialog.Builder(this)
+                .setTitle("Select Period")
+                .setItems(periods) { _, which ->
+                    statsPeriod = periods[which]
+                    binding.viewStatsTab.tvSelectedPeriod.text = statsPeriod
+                    refreshStats()
+                }
+                .show()
+        }
+
+        refreshStats()
+    }
+
+    private fun refreshStats() {
+        observeStatsJob?.cancel()
+        observeStatsJob = lifecycleScope.launch {
+            val allTasks = database.taskDao().getAllTasks()
+            val today = LocalDate.now()
+
+            val filteredTasks = when (statsPeriod) {
+                "This Month" -> {
+                    allTasks.filter {
+                        try {
+                            val parsed = LocalDate.parse(it.date, dbDateFormatter)
+                            parsed.year == today.year && parsed.monthValue == today.monthValue
+                        } catch (e: Exception) {
+                            false
+                        }
+                    }
+                }
+                "All Time" -> allTasks
+                else -> { // "This Week"
+                    val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                    val endOfWeek = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
+                    allTasks.filter {
+                        try {
+                            val parsed = LocalDate.parse(it.date, dbDateFormatter)
+                            !parsed.isBefore(startOfWeek) && !parsed.isAfter(endOfWeek)
+                        } catch (e: Exception) {
+                            false
+                        }
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
 
-    private fun setupListeners() {
-        // Monitoring switch with synchronized state handling
-        binding.switchMonitoring.setOnCheckedChangeListener { _, isChecked ->
-            if (isProgrammaticSwitchChange) return@setOnCheckedChangeListener
+            val doneCount = filteredTasks.count { it.isCompleted }
+            val pendingCount = filteredTasks.count { !it.isCompleted }
+            val total = filteredTasks.size
+            val completionRate = if (total > 0) ((doneCount * 100) / total) else 0
 
-            if (isChecked) {
-                if (!hasOverlayPermission()) {
-                    Toast.makeText(
-                        this,
-                        "System Alert Window permission required to display task overlay.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    requestOverlayPermission()
-                    setSwitchCheckedWithoutTriggering(false)
-                    return@setOnCheckedChangeListener
-                }
+            binding.viewStatsTab.tvStatTasksDone.text = doneCount.toString()
+            binding.viewStatsTab.tvStatTasksPending.text = pendingCount.toString()
+            binding.viewStatsTab.tvStatCompletionRate.text = "$completionRate%"
 
-                if (!hasNotificationPermission()) {
-                    Toast.makeText(
-                        this,
-                        "Notification permission required for background monitoring.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    requestNotificationPermission()
-                    setSwitchCheckedWithoutTriggering(false)
-                    return@setOnCheckedChangeListener
-                }
+            // Weekly Bars (Mon - Sun)
+            val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            val daysOfWeek = (0..6).map { startOfWeek.plusDays(it.toLong()) }
+            val maxBarHeightPx = (130 * resources.displayMetrics.density).toInt()
 
-                // Explicitly persist enabled state and start monitoring
-                PreferenceHelper.setMonitoringEnabled(this, true)
-                UnlockMonitorService.start(this)
-                updateStatusText(true)
-            } else {
-                // Explicitly persist disabled state and stop monitoring immediately
-                PreferenceHelper.setMonitoringEnabled(this, false)
-                UnlockMonitorService.stop(this)
-                TaskOverlayManager.onMonitoringDisabled(this)
-                updateStatusText(false)
+            val bars = listOf(
+                binding.viewStatsTab.barMon,
+                binding.viewStatsTab.barTue,
+                binding.viewStatsTab.barWed,
+                binding.viewStatsTab.barThu,
+                binding.viewStatsTab.barFri,
+                binding.viewStatsTab.barSat,
+                binding.viewStatsTab.barSun
+            )
+
+            daysOfWeek.forEachIndexed { index, day ->
+                val dayStr = day.format(dbDateFormatter)
+                val dayTasks = allTasks.filter { it.date == dayStr }
+                val dayDone = dayTasks.count { it.isCompleted }
+                val ratio = if (dayTasks.isNotEmpty()) dayDone.toFloat() / dayTasks.size.toFloat() else 0f
+                val barHeight = (ratio * maxBarHeightPx).toInt().coerceAtLeast(if (dayTasks.isNotEmpty()) 8 else 0)
+
+                val params = bars[index].layoutParams
+                params.height = barHeight
+                bars[index].layoutParams = params
             }
         }
+    }
 
-        // Grant Overlay Permission button in banner
-        binding.btnGrantOverlay.setOnClickListener {
-            requestOverlayPermission()
+    // ==========================================
+    // 4. NAVIGATION & DRAWER
+    // ==========================================
+
+    private fun setupNavigationAndDrawer() {
+        // Drawer toggle button
+        binding.btnMenu.setOnClickListener {
+            binding.drawerLayout.openDrawer(GravityCompat.START)
         }
 
-        // Quick Test Overlay button (manual trigger of 3-second display)
-        binding.btnTestOverlay.setOnClickListener {
+        // Drawer Items
+        binding.drawerItemCategories.setOnClickListener {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, CategoriesActivity::class.java))
+        }
+
+        binding.drawerItemCompleted.setOnClickListener {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, CompletedActivity::class.java))
+        }
+
+        binding.drawerItemSettings.setOnClickListener {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        binding.drawerItemTestOverlay.setOnClickListener {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
             if (!hasOverlayPermission()) {
                 requestOverlayPermission()
             } else {
@@ -197,104 +424,93 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Add Task Button
-        binding.btnAddTask.setOnClickListener {
-            addNewTask()
+        // Bottom Navigation Tabs
+        binding.tabBtnToday.setOnClickListener {
+            switchToTab(TAB_TODAY)
         }
 
-        // Filter Toggle (Today vs All)
-        binding.toggleTaskFilter.check(R.id.btnFilterToday)
-        binding.toggleTaskFilter.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (isChecked) {
-                showOnlyToday = (checkedId == R.id.btnFilterToday)
-                observeTasks()
-            }
+        binding.tabBtnCalendar.setOnClickListener {
+            switchToTab(TAB_CALENDAR)
         }
-    }
 
-    private fun setSwitchCheckedWithoutTriggering(checked: Boolean) {
-        isProgrammaticSwitchChange = true
-        binding.switchMonitoring.isChecked = checked
-        isProgrammaticSwitchChange = false
-    }
+        binding.tabBtnStats.setOnClickListener {
+            switchToTab(TAB_STATS)
+        }
 
-    private fun updateStatusText(isActive: Boolean) {
-        if (isActive) {
-            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_active)
-            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_active))
-        } else {
-            binding.tvMonitorStatus.text = getString(R.string.status_monitoring_inactive)
-            binding.tvMonitorStatus.setTextColor(ContextCompat.getColor(this, R.color.status_inactive))
+        // FAB Add Task
+        binding.fabAddTask.setOnClickListener {
+            startActivity(Intent(this, AddTaskActivity::class.java))
         }
     }
 
-    private fun addNewTask() {
-        val title = binding.etTaskTitle.text?.toString()?.trim().orEmpty()
-        if (title.isEmpty()) {
-            binding.tilTaskTitle.error = "Please enter a task title"
-            return
-        }
-        binding.tilTaskTitle.error = null
+    private fun switchToTab(tab: Int) {
+        currentTab = tab
 
-        val isToday = binding.cbAssignToday.isChecked
-        val taskDate = if (isToday) DateUtils.getTodayDateString() else DateUtils.getTomorrowDateString()
+        binding.viewTodayTab.root.visibility = if (tab == TAB_TODAY) View.VISIBLE else View.GONE
+        binding.viewCalendarTab.root.visibility = if (tab == TAB_CALENDAR) View.VISIBLE else View.GONE
+        binding.viewStatsTab.root.visibility = if (tab == TAB_STATS) View.VISIBLE else View.GONE
 
-        val priority = when {
-            binding.chipHigh.isChecked -> "HIGH"
-            binding.chipLow.isChecked -> "LOW"
-            else -> "MEDIUM"
-        }
+        // Hide FAB on Stats tab
+        binding.fabAddTask.visibility = if (tab == TAB_STATS) View.GONE else View.VISIBLE
 
-        val newTask = Task(
-            title = title,
-            date = taskDate,
-            priority = priority
-        )
+        // Tab selection styling
+        val activeColor = ContextCompat.getColor(this, R.color.text_primary)
+        val mutedColor = ContextCompat.getColor(this, R.color.text_muted)
 
-        lifecycleScope.launch {
-            database.taskDao().insertTask(newTask)
-            TaskOverlayManager.invalidateCache()
-            TaskOverlayManager.warmCache(this@MainActivity)
-            binding.etTaskTitle.text?.clear()
-            Toast.makeText(this@MainActivity, "Task added!", Toast.LENGTH_SHORT).show()
+        binding.tvTabToday.setTextColor(if (tab == TAB_TODAY) activeColor else mutedColor)
+        binding.ivTabToday.setColorFilter(if (tab == TAB_TODAY) activeColor else mutedColor)
+
+        binding.tvTabCalendar.setTextColor(if (tab == TAB_CALENDAR) activeColor else mutedColor)
+        binding.ivTabCalendar.setColorFilter(if (tab == TAB_CALENDAR) activeColor else mutedColor)
+
+        binding.tvTabStats.setTextColor(if (tab == TAB_STATS) activeColor else mutedColor)
+        binding.ivTabStats.setColorFilter(if (tab == TAB_STATS) activeColor else mutedColor)
+
+        if (tab == TAB_CALENDAR) {
+            refreshCalendarDays()
+            observeTasksForCalendarDate()
+        } else if (tab == TAB_STATS) {
+            refreshStats()
         }
     }
 
-    private fun observeTasks() {
-        observeTasksJob?.cancel()
-        observeTasksJob = lifecycleScope.launch {
-            val flow = if (showOnlyToday) {
-                database.taskDao().getTodayTasksFlow(DateUtils.getTodayDateString())
+    // ==========================================
+    // 5. SEARCH BAR
+    // ==========================================
+
+    private fun setupSearch() {
+        binding.btnSearch.setOnClickListener {
+            val isVisible = binding.layoutSearchBar.visibility == View.VISIBLE
+            binding.layoutSearchBar.visibility = if (isVisible) View.GONE else View.VISIBLE
+            if (!isVisible) {
+                binding.etSearchQuery.requestFocus()
             } else {
-                database.taskDao().getAllTasksFlow()
-            }
-
-            flow.collectLatest { tasks ->
-                taskAdapter.submitList(tasks)
-                if (tasks.isEmpty()) {
-                    binding.tvEmptyList.visibility = View.VISIBLE
-                    binding.tvEmptyList.text = if (showOnlyToday) {
-                        getString(R.string.empty_today_tasks)
-                    } else {
-                        getString(R.string.empty_tasks)
-                    }
-                } else {
-                    binding.tvEmptyList.visibility = View.GONE
-                }
+                binding.etSearchQuery.text?.clear()
+                searchQuery = ""
+                applySearchFilter()
             }
         }
+
+        binding.btnCloseSearch.setOnClickListener {
+            binding.layoutSearchBar.visibility = View.GONE
+            binding.etSearchQuery.text?.clear()
+            searchQuery = ""
+            applySearchFilter()
+        }
+
+        binding.etSearchQuery.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchQuery = s?.toString()?.trim().orEmpty()
+                applySearchFilter()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
     }
 
-    private fun updatePermissionAndServiceUI() {
-        val overlayGranted = hasOverlayPermission()
-        binding.bannerOverlayPermission.visibility = if (overlayGranted) View.GONE else View.VISIBLE
-
-        val isMonitoring = PreferenceHelper.isMonitoringEnabled(this)
-        val shouldBeActive = isMonitoring && overlayGranted
-
-        setSwitchCheckedWithoutTriggering(shouldBeActive)
-        updateStatusText(shouldBeActive)
-    }
+    // ==========================================
+    // 6. PERMISSIONS
+    // ==========================================
 
     private fun hasOverlayPermission(): Boolean {
         return Settings.canDrawOverlays(this)
@@ -319,9 +535,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+    companion object {
+        const val TAB_TODAY = 0
+        const val TAB_CALENDAR = 1
+        const val TAB_STATS = 2
     }
 }

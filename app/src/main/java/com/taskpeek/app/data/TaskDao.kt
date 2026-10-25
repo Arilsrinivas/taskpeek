@@ -32,11 +32,41 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY isCompleted ASC, date ASC, id DESC")
     fun getAllTasksFlow(): Flow<List<Task>>
 
+    @Query("SELECT * FROM tasks WHERE date = :date ORDER BY isCompleted ASC, id DESC")
+    fun getTasksForDateFlow(date: String): Flow<List<Task>>
+
+    @Query("SELECT * FROM tasks WHERE date = :date ORDER BY isCompleted ASC, id DESC")
+    suspend fun getTasksForDate(date: String): List<Task>
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 1 ORDER BY completedAt DESC, date DESC, id DESC")
+    fun getCompletedTasksFlow(): Flow<List<Task>>
+
+    @Query("SELECT * FROM tasks WHERE category = :category ORDER BY isCompleted ASC, date DESC, id DESC")
+    fun getTasksByCategoryFlow(category: String): Flow<List<Task>>
+
+    @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
+    suspend fun getTaskById(taskId: Long): Task?
+
+    @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
+    fun getTaskByIdFlow(taskId: Long): Flow<Task?>
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE category = :category")
+    fun getCategoryTaskCountFlow(category: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE category = :category")
+    suspend fun getCategoryTaskCount(category: String): Int
+
+    @Query("SELECT * FROM tasks")
+    suspend fun getAllTasks(): List<Task>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: Task): Long
 
     @Update
     suspend fun updateTask(task: Task)
+
+    @Query("UPDATE tasks SET isCompleted = :completed, completedAt = :completedAt WHERE id = :taskId")
+    suspend fun setTaskCompletedWithTime(taskId: Long, completed: Boolean, completedAt: Long)
 
     @Query("UPDATE tasks SET isCompleted = :completed WHERE id = :taskId")
     suspend fun setTaskCompleted(taskId: Long, completed: Boolean)

@@ -2,6 +2,7 @@ package com.taskpeek.app.ui
 
 import android.graphics.Paint
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -10,12 +11,13 @@ import androidx.recyclerview.widget.RecyclerView
 import com.taskpeek.app.R
 import com.taskpeek.app.data.Task
 import com.taskpeek.app.databinding.ItemTaskBinding
-import com.taskpeek.app.util.DateUtils
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class TaskAdapter(
     private val onToggleComplete: (Task, Boolean) -> Unit,
-    private val onDelete: (Task) -> Unit,
-    private val onEdit: (Task) -> Unit = {}
+    private val onTaskClick: (Task) -> Unit
 ) : ListAdapter<Task, TaskAdapter.TaskViewHolder>(TaskDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TaskViewHolder {
@@ -40,61 +42,51 @@ class TaskAdapter(
             binding.tvTaskTitle.text = task.title
 
             // Handle completion styling
-            binding.cbCompleted.setOnCheckedChangeListener(null)
-            binding.cbCompleted.isChecked = task.isCompleted
-
             if (task.isCompleted) {
+                binding.ivCompletionCircle.setImageResource(R.drawable.ic_circle_checked)
                 binding.tvTaskTitle.paintFlags =
                     binding.tvTaskTitle.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-                binding.tvTaskTitle.setTextColor(ContextCompat.getColor(context, R.color.text_tertiary))
+                binding.tvTaskTitle.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
             } else {
+                binding.ivCompletionCircle.setImageResource(R.drawable.ic_circle_outline)
                 binding.tvTaskTitle.paintFlags =
                     binding.tvTaskTitle.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
                 binding.tvTaskTitle.setTextColor(ContextCompat.getColor(context, R.color.text_primary))
             }
 
-            binding.cbCompleted.setOnCheckedChangeListener { _, isChecked ->
-                onToggleComplete(task, isChecked)
-            }
-
-            // Date display
-            binding.tvTaskDate.text = DateUtils.formatDisplayDate(task.date)
-
-            // Priority badge styling
-            when (task.priority.uppercase()) {
-                "HIGH" -> {
-                    binding.tvTaskPriority.text = "HIGH"
-                    binding.tvTaskPriority.setTextColor(
-                        ContextCompat.getColor(context, R.color.priority_high)
-                    )
-                    binding.tvTaskPriority.background =
-                        ContextCompat.getDrawable(context, R.drawable.bg_badge_high)
-                }
-                "LOW" -> {
-                    binding.tvTaskPriority.text = "LOW"
-                    binding.tvTaskPriority.setTextColor(
-                        ContextCompat.getColor(context, R.color.priority_low)
-                    )
-                    binding.tvTaskPriority.background =
-                        ContextCompat.getDrawable(context, R.drawable.bg_badge_low)
-                }
-                else -> {
-                    binding.tvTaskPriority.text = "MED"
-                    binding.tvTaskPriority.setTextColor(
-                        ContextCompat.getColor(context, R.color.priority_medium)
-                    )
-                    binding.tvTaskPriority.background =
-                        ContextCompat.getDrawable(context, R.drawable.bg_badge_medium)
+            // Subtitle: Category or clean category label
+            val categoryText = if (task.category.isNotBlank() && task.category != "Others") {
+                task.category
+            } else {
+                // Infer category from title keywords if Others
+                val lower = task.title.lowercase()
+                when {
+                    lower.contains("study") || lower.contains("book") || lower.contains("read") || lower.contains("exam") || lower.contains("notes") || lower.contains("revision") -> "Study"
+                    lower.contains("work") || lower.contains("project") || lower.contains("taskpeek") || lower.contains("code") || lower.contains("pr") || lower.contains("dev") -> "Work"
+                    lower.contains("gym") || lower.contains("run") || lower.contains("workout") || lower.contains("health") || lower.contains("walk") -> "Health"
+                    lower.contains("plan") || lower.contains("call") || lower.contains("buy") || lower.contains("personal") -> "Personal"
+                    else -> "Personal"
                 }
             }
+            binding.tvTaskSubtitle.text = categoryText
+            binding.tvTaskSubtitle.visibility = View.VISIBLE
 
-            // Item click to edit task
+            // Scheduled time display
+            val timeText = when {
+                task.time.isNotBlank() -> task.time
+                task.createdAt > 0L -> SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(task.createdAt))
+                else -> "9:00 AM"
+            }
+            binding.tvTaskTime.text = timeText
+
+            // Circular completion toggle
+            binding.ivCompletionCircle.setOnClickListener {
+                onToggleComplete(task, !task.isCompleted)
+            }
+
+            // Full row click to view task detail
             itemView.setOnClickListener {
-                onEdit(task)
-            }
-
-            binding.btnDeleteTask.setOnClickListener {
-                onDelete(task)
+                onTaskClick(task)
             }
         }
     }
